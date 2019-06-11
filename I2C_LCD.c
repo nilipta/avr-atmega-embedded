@@ -1,10 +1,9 @@
 /*
-* I2C_LCD.c
-*
-* Created: 2018-09-03 ?? 12:40:33
-*  Author: Prouser
-*/
-
+ * I2C_LCD.c
+ *
+ * Created: 6/10/2019 12:44:49 PM
+ *  Author: prouser
+ */ 
 
 #define F_CPU	16000000UL
 #include <avr/io.h>
