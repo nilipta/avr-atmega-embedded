@@ -13,47 +13,41 @@
 #include <stdio.h>
 #include <avr/interrupt.h>
 #include "I2C_LCD.h"
+#define USART_BAUDRATE 9600
+#define BAUD_PRESCALE (((F_CPU / (USART_BAUDRATE * 16UL))) - 1)
 
-
-static volatile long  counterVal = 0;
+static volatile int i=0;
+static volatile char tmp[10]={"nomsg"};
 
 int main(void)
 {
 	
 	I2C_LCD_init();
+	_delay_ms(5);
 	
-	//timer interrupt 1 second
-	OCR1A = 15624;
+	//UBRRH = (unsigned char)(103>>8);
+	//UBRRL = (unsigned char)103;
+	//UCSRB = (1<<RXEN)|(1<<TXEN)|(1<<RXCIE);
+	//UCSRC = (1<<URSEL)|(0<<USBS)|(3<<UCSZ0);
+	
+	UCSRB = (1 << RXEN) | (1 << TXEN);   // Turn on the transmission and reception circuitry
+	UCSRC = (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1); // Use 8-bit character sizes
 
-	TCCR1B |= (1 << WGM12);
-	// Mode 4, CTC on OCR1A
-
-	TIMSK |= (1 << OCIE1A);
-	//Set interrupt on compare match
-
-	TCCR1B |= (1 << CS12) | (1 << CS10);
-	// set prescaler to 1024 and start the timer
+	UBRRH = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate value into the high byte of the UBRR register
+	UBRRL = BAUD_PRESCALE;
+	_delay_ms(5);
 	
 	
 	
-	sei();
+	//sei();
 	// enable interrupts
-	
+	I2C_LCD_write_string_XY(0, 0, tmp);
 	
     while (1) 
     {
-		char buffer[20];
-		sprintf (buffer, "%lu", counterVal);
-		I2C_LCD_write_string_XY(0, 0, "hello world");
-		//_delay_ms(2000);
-		I2C_LCD_write_string_XY(1, 0, buffer);
-		/* Replace with your application code */
+		while ((UCSRA & (1 << RXC)) == 0) {}; // Do nothing until data have been received and is ready to be read from UDR
+			tmp[i] = UDR;	
+			i++;
+			I2C_LCD_write_string_XY(0, 0, tmp);
     }
-}
-
-
-ISR (TIMER1_COMPA_vect)
-{
-	// action to be done every 1 sec
-	counterVal++;
 }
