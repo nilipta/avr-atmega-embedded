@@ -1,158 +1,101 @@
 /*
- * lcdWithInterrupt.c
+ * rtc328.c
  *
- * Created: 6/10/2019 12:41:42 PM
+ * Created: 6/23/2019 7:23:37 PM
  * Author : prouser
  */ 
-
 #define F_CPU 16000000UL
-
 #include <avr/io.h>
 #include <util/delay.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <avr/interrupt.h>
 #include "I2C_LCD.h"
+#include "rtc3231.h"
 
-#define USART_BAUDRATE 9600
-#define BAUD_PRESCALE (((F_CPU / (USART_BAUDRATE * 16UL))) - 1)
+static volatile long  counterVal = 0;
 
-static volatile long counterVal=0;
-static volatile char buffer[10]={"0"};
-static volatile uint8_t status = 0;
+//char t[]="Time: ";
+//char da[]=" Date: ";
 
-void uart_transmit (unsigned char data);
+
+rtc_t today;
+rtc_t set_date;
+
+void setDate()
+{
+rtc_t rtc;
+rtc.hour = dec2bcd(3); //24 hour
+rtc.min =  dec2bcd(8); // minute
+rtc.sec =  dec2bcd(10); //second
+rtc.date = dec2bcd(24);   //28
+rtc.month = dec2bcd(6);  //08
+rtc.year = dec2bcd(19);  //2017
+rtc.weekDay = 7;         // Friday: 5th day of week considering Monday as first day.
+ds3231_SetDateTime(&rtc);
+}
+
 
 int main(void)
 {
-	
+
 	I2C_LCD_init();
-	_delay_ms(5);
-	/************TIMER****************************/
-	//timer interrupt 1 second
-	OCR1A = 15624;
-
-	TCCR1B |= (1 << WGM12);
-	// Mode 4, CTC on OCR1A
-
-	TIMSK |= (1 << OCIE1A);
-	//Set interrupt on compare match
-
-	TCCR1B |= (1 << CS12) | (1 << CS10);
-	// set pre-scaler to 1024 and start the timer
+	_delay_ms(100);
 	
-	/************TIMER END****************************/
+	//setDate();
 	
-	/************ SERIEL ****************************/
+	I2C_LCD_write_string_XY(1, 0, "Hello world");
+	_delay_ms(1000);
 	
-	UCSRB = (1 << RXEN) | (1 << TXEN);   // Turn on the transmission and reception circuitry
-	//UCSRB = (1<<RXCIE) | (1 << RXEN) | (1 << TXEN);
-	UCSRC = (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1); // Use 8-bit character sizes
-
-	UBRRH = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate value into the high byte of the UBRR register
-	UBRRL = BAUD_PRESCALE;
-	_delay_ms(5);
-	
-	/************ SERIEL END****************************/
+	I2C_LCD_clear();
 	
 	
-	sei();
-	// enable interrupts
-
-	
-	
-    while (1) 
+  while (1) 
     {
-		I2C_LCD_write_string_XY(0, 0, "sending Number - ");
-		_delay_ms(1000);
-		//if(counterVal%2==0)
-		{
-			long tempI=0;
-			char tempBuf[10];
-			sprintf (buffer, "%lu", counterVal);
-			while(buffer[tempI]!='\0'){
-				
-				//sprintf (tempBuf, "%lu", tempI);
-				//I2C_LCD_write_string_XY(0, 0, tempBuf);
-				uart_transmit(buffer[tempI]);
-				//uart_transmit('X');
-				tempI++;	//checking how many digit in counterval
-			}
-			
-			if(buffer[tempI]=='\0')
-			{
-				
-				uart_transmit('\n');
-				_delay_ms(400);
-				//check for response....
-				checkResponseFor5Sec();
-			}
-			
-				
-		}	
+	char timeMsg[16]="";
+	char dateMsg[16]="";
+	ds3231_GetDateTime(&today);
+	char d_y[3];
+	char d_m[3];
+	char d_d[3];
+	char d_h[3];
+	char d_mi[3];
+	char d_s[3];
+	char d_tmp[4];
+	
+	itoa(bcd2dec(today.hour) , d_h, 10); //hour
+	itoa(bcd2dec(today.min), d_mi, 10);  //min
+	itoa(bcd2dec(today.sec), d_s, 10);   //sec
+	itoa(bcd2dec(today.date), d_d, 10);  //day
+	itoa(bcd2dec(today.month), d_m, 10); //month
+	itoa(bcd2dec(today.year), d_y, 10);  //year
+	
+	strcat(timeMsg,"Time:");   //hour
+	strcat(timeMsg,d_h);   //hour
+	strcat(timeMsg,":");
+
+	strcat(timeMsg,d_mi);  //min
+	strcat(timeMsg,":");
+	
+	strcat(timeMsg,d_s);   //sec
+	
+	strcat(dateMsg,"Date:");   //day
+	strcat(dateMsg,d_d);   //day
+	strcat(dateMsg,".");
+	
+	strcat(dateMsg,d_m);   //month
+	strcat(dateMsg,".20");
+	
+	strcat(dateMsg,d_y);   //year
+
+
+	I2C_LCD_goto_XY(0, 0);
+	I2C_LCD_write_string(timeMsg);
+	
+	I2C_LCD_goto_XY(1, 0);
+	I2C_LCD_write_string(dateMsg);
+	_delay_ms(1000);
+	I2C_LCD_clear();
     }
 }
 
-
-ISR (TIMER1_COMPA_vect)
-{
-	// action to be done every 1 sec
-	counterVal++;
-	sprintf (buffer, "%lu", counterVal);
-	I2C_LCD_write_string_XY(1, 0, buffer);
-}
-
-// function to send data
-void uart_transmit (unsigned char data)
-{
-	while (!( UCSRA & (1<<UDRE)));                // wait while register is free
-	UDR = data;                                   // load data in the register
-}
-
-void checkResponseFor5Sec()
-{
-	I2C_LCD_write_string_XY(0, 0,"Response??  ");
-	char x[10];
-	uint8_t checkInd = 0;
-	while(1)
-	{
-		while (!(UCSRA & (1 << RXC)) )
-		{			
-		}
-		 ; // Do nothing until data have been received and is ready to be read from UDR
-		x[checkInd] = UDR;
-		checkInd++;
-		
-		if(x[checkInd] == '|' || x[checkInd] == '\n' || x[checkInd] == '\0')
-		{
-			for(uint8_t ir =0; ir<10; ir++)
-			{
-				if(x[ir] == 'o' || x[ir] == 'k' || x[ir] == '|')
-					{
-						I2C_LCD_write_string_XY(0, 0, " --   ok   --  ");
-						break;		
-					}
-				else
-				{
-					I2C_LCD_write_string_XY(0, 0, "-- NAN -- ");
-					break;
-				}
-			}
-		}
-		break;	
-		
-	}
-	
-	_delay_ms(1000);
-}
-
-
-/*ISR ( USART_RXC_vect )
-
-{
-	char x[5] = "Hello";
-
-	x[1] = UDR ; // Fetch the received byte value into the variable " ByteReceived "
-
-	I2C_LCD_write_string_XY(0, 0, x);
-}*/
